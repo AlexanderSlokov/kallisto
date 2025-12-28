@@ -26,7 +26,7 @@ struct LogConfig {
     // Constructor khởi tạo LogConfig nếu muốn dùng
     LogConfig(std::string_view fileName = "") {
         if (fileName.empty()) {
-            throw std::invalid_argument("[error] (LogConfig) (constructor): default file name is required.");
+            throw std::invalid_argument("[error] [LogConfig::Constructor]: default file name is required.");
         }
         defaultFileName = fileName;
     }
