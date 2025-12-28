@@ -1,8 +1,10 @@
 #include <iostream>
-#include "kallisto/kallisto.h"
+#include "kallisto/kallisto.hpp"
+#include "kallisto/logger.hpp"
 
-// TODO: Đi kiếm hàm log helper của Hashicorp Vault và gắn vào giùm,
-// log level sẽ được config thông qua ENV var.
+
+// log level sẽ được config thông qua ENV.
+
 int main() {
     // std::cout << "Kallisto Server starting..." << std::endl;
     
