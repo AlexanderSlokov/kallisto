@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     valgrind \
     wget \
     ca-certificates \
-    libspdlog-dev
+    libspdlog-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Cài đặt Locust system-wide để dùng được luôn trong terminal
