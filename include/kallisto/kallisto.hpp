@@ -3,29 +3,42 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <memory>
+#include "kallisto/secret_entry.hpp"
+#include "kallisto/cuckoo_table.hpp"
+#include "kallisto/btree_index.hpp"
 
 namespace kallisto {
-
-struct SecretEntry {
-    std::string key;
-    std::string value;
-    std::string path;
-    std::chrono::system_clock::time_point created_at;
-    uint32_t ttl; // in seconds
-};
 
 class KallistoServer {
 public:
     KallistoServer();
     ~KallistoServer();
-    // Yêu cầu: các hàm tương tác dữ liệu cần đẩy hẳn đi theo tính đóng gói,
-    // TL;DR: gói đủ dữ liệu xong mới chuyển đi xuống storage hoặc trả kết quả
+
+    /**
+     * Stores a secret at a specific path.
+     * 1. Validates path in B-Tree.
+     * 2. Inserts/Updates entry in Cuckoo Table.
+     */
     bool put_secret(const std::string& path, const std::string& key, const std::string& value);
+
+    /**
+     * Retrieves a secret.
+     * 1. Validates path in B-Tree.
+     * 2. O(1) Lookup in Cuckoo Table.
+     */
     std::string get_secret(const std::string& path, const std::string& key);
+
+    /**
+     * Deletes a secret.
+     */
     bool delete_secret(const std::string& path, const std::string& key);
 
 private:
-    // Components will be added here
+    std::unique_ptr<CuckooTable> storage;
+    std::unique_ptr<BTreeIndex> path_index;
+
+    std::string build_full_key(const std::string& path, const std::string& key) const;
 };
 
 } // namespace kallisto

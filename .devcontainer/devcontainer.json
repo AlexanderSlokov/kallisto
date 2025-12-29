@@ -23,6 +23,6 @@
   "remoteUser": "vscode",
   "postCreateCommand": "g++ --version && cmake --version && git --version",
   "mounts": [
-    "source=${localWorkspaceFolder},target=/workspaces/kallisto,type=bind"
+    "source=${localWorkspaceFolder},target=/workspaces,type=bind"
   ]
 }

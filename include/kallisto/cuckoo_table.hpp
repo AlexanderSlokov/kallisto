@@ -3,27 +3,39 @@
 #include <string>
 #include <vector>
 #include <optional>
-// Thư viện lấy giá trị từ ENV
 #include <cstdlib>
-#include "kallisto.h"
+#include "kallisto/secret_entry.hpp"
+#include "kallisto/siphash.hpp"
 
 namespace kallisto {
 
 class CuckooTable {
 public:
-    // Cho phép declare size thông qua ENV var `KALLISTO_CUCKOO_TABLE_SIZE`
-    CuckooTable(size_t size = std::stoi(getenv("KALLISTO_CUCKOO_TABLE_SIZE")));
+    /**
+     * @param size The capacity of each of the two tables.
+     */
+    CuckooTable(size_t size = 1024);
     
-    // Cuckoo table chỉ phục vụ 3 tác vụ chính:
-    // - Insert: đưa một hash key vào entry
-    // - Lookup: tìm kiếm entry theo hash key
-    // - Remove: xóa entry
+    /**
+     * Inserts a secret entry into the cuckoo table.
+     * Uses the "kicking" mechanism to resolve collisions.
+     * @return true if insertion was successful, false if a cycle was detected (full table).
+     */
     bool insert(const std::string& key, const SecretEntry& entry);
-    std::optional<SecretEntry> lookup(const std::string& key);
+
+    /**
+     * Looks up an entry by key. O(1) worst-case.
+     * @return The entry if found, std::nullopt otherwise.
+     */
+    std::optional<SecretEntry> lookup(const std::string& key) const;
+
+    /**
+     * Removes an entry by key.
+     * @return true if entry was removed, false if not found.
+     */
     bool remove(const std::string& key);
 
 private:
-    // Mỗi table sẽ có một cái bucket
     struct Bucket {
         bool occupied = false;
         std::string key;
@@ -34,6 +46,7 @@ private:
     std::vector<Bucket> table_2;
 
     size_t capacity;
+    const int max_displacements = 100;
 
     size_t hash_1(const std::string& key) const;
     size_t hash_2(const std::string& key) const;

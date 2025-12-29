@@ -1,34 +1,46 @@
-// Inspired by HashiCorp Vault's logger design
-
-#pragma once // Thay cho Include Guard truyền thống
+#pragma once
 
 #include <string>
+#include <iostream>
 #include <string_view>
 #include <memory>
-#include <stdexcept>
 
 namespace kallisto {
 
-enum class LogFormat {
-    Unspecified = 0,
-    Standard = 1
-    // Todo: JSON log dev sau.
-};
+enum class LogFormat { Standard };
 
 struct LogConfig {
     std::string name;
-    LogFormat format = LogFormat::Standard;
+    std::string logLevel = "info";
     std::string logFilePath;
-    int logRotateDuration = 24 * 60 * 60;   // 1 ngày
-    int logRotateBytes = 12 * 1024 * 1024;  // 12MB
-    int logRotateMaxFiles = 5;
-    std::string defaultFileName = "kallisto.log";
-    // Constructor khởi tạo LogConfig nếu muốn dùng
-    LogConfig(std::string_view fileName = "") {
-        if (fileName.empty()) {
-            throw std::invalid_argument("[error] [LogConfig::Constructor]: default file name is required.");
-        }
-        defaultFileName = fileName;
-    }
+    int logRotateBytes = 0;
+    int logRotateMaxFiles = 0;
+    LogConfig(std::string_view name) : name(name) {}
 };
+
+class Logger {
+public:
+    static Logger& getInstance() {
+        static Logger instance;
+        return instance;
+    }
+    void setup(const LogConfig& config) {}
+};
+
+inline void info(const std::string& msg) {
+    std::cout << "[INFO] " << msg << std::endl;
+}
+
+inline void error(const std::string& msg) {
+    std::cerr << "[ERROR] " << msg << std::endl;
+}
+
+inline void debug(const std::string& msg) {
+    std::cout << "[DEBUG] " << msg << std::endl;
+}
+
+inline void warn(const std::string& msg) {
+    std::cout << "[WARN] " << msg << std::endl;
+}
+
 } // namespace kallisto

@@ -3,23 +3,40 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <algorithm>
 
 namespace kallisto {
 
+/**
+ * BTreeIndex "Lite" for path-based secret management.
+ * 
+ * This is a simplified B-Tree optimized for strings (paths).
+ * It acts as a validator before secret lookup in the CuckooTable.
+ */
 class BTreeIndex {
 public:
-    BTreeIndex();
-    // Thêm path vào btree index
+    /**
+     * @param degree Minimum degree (t). A node can have at most 2t-1 keys.
+     */
+    BTreeIndex(int degree = 3);
+
+    /**
+     * Inserts a path into the index.
+     * @param path The path to insert (e.g., "/prod/db").
+     * @return true if insertion was successful.
+     */
     bool insert_path(const std::string& path);
-    // Kiểm tra path có tồn tại trong btree index không
+
+    /**
+     * Validates if a path exists in the index.
+     * @param path The path to validate.
+     * @return true if the path exists.
+     */
     bool validate_path(const std::string& path) const;
 
 private:
     struct Node {
-        // Phải đánh dấu chỉ mục path ở thư mục cuối cùng (lá ở cuối cành),
-        // vì có thể gặp tấn công path traversal.
         bool is_leaf;
-        // Keys, children? là cái gì nữa?
         std::vector<std::string> keys;
         std::vector<std::unique_ptr<Node>> children;
 
@@ -27,8 +44,11 @@ private:
     };
 
     std::unique_ptr<Node> root;
-    // WTF is "t" bro? Đặt tên biến cho tường minh giùm.
-    int t; // Minimum degree
+    int min_degree; // Fixed the cryptic "t"
+
+    void split_child(Node* parent, int i, Node* child);
+    void insert_non_full(Node* node, const std::string& key);
+    bool search(Node* node, const std::string& key) const;
 };
 
 } // namespace kallisto

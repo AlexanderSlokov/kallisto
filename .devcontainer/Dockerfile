@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-venv \
     valgrind \
+    wget \
+    ca-certificates \
+    libspdlog-dev
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Cài đặt Locust system-wide để dùng được luôn trong terminal
