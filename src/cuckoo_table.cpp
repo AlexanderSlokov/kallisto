@@ -3,20 +3,19 @@
 
 namespace kallisto {
 
-CuckooTable::CuckooTable(size_t size) : 
-	capacity(size),
-	hasher1(0xDEADBEEF64, 0xCAFEBABE64),
-	hasher2(0xFACEB00C64, 0xDEADC0DE64) {
-	table_1.resize(capacity);
-	table_2.resize(capacity);
+CuckooTable::CuckooTable(size_t size) : capacity(size) {
+    table_1.resize(capacity);
+    table_2.resize(capacity);
 }
 
 size_t CuckooTable::hash_1(const std::string& key) const {
-	return hasher1.hash(key) % capacity;
+    // Seed 1: 0xDEADBEEF, 0xCAFEBABE
+    return SipHash::hash(key, 0xDEADBEEF64, 0xCAFEBABE64) % capacity;
 }
 
 size_t CuckooTable::hash_2(const std::string& key) const {
-	return hasher2.hash(key) % capacity;
+    // Seed 2: 0xFACEB00C, 0xDEADC0DE
+    return SipHash::hash(key, 0xFACEB00C64, 0xDEADC0DE64) % capacity;
 }
 
 bool CuckooTable::insert(const std::string& key, const SecretEntry& entry) {
