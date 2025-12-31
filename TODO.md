@@ -9,10 +9,11 @@
     - [x] Thiết kế struct `SecretEntry`.
 - [x] **Ngày 2 (28/12): Trụ cột 1 - SipHash (Security)**
     - [x] Implement thuật toán SipHash (chống Hash Flooding).
-    - [x] Viết Unit Test cơ bản kiểm tra tính nhất quán của Hash.
-- [x] **Ngày 3 & 4 (29/12 - 30/12): Trụ cột 2 - Cuckoo Hashing (Performance)**
+    - [ ] Viết Unit Test cơ bản kiểm tra tính nhất quán của Hash (Cần bổ sung vào `test_main.cpp`).
+- [/] **Ngày 3 & 4 (29/12 - 30/12): Trụ cột 2 - Cuckoo Hashing (Performance)**
     - [x] Implement logic `insert()` với cơ chế "kicking" (đá key).
     - [x] Implement `lookup()` và `delete()` với độ phức tạp $O(1)$.
+    - [ ] Implement `rehash()` để tăng kích thước bảng khi đầy (Hiện đang là stub).
     - [x] **Review:** Tự tay code lại hàm `insert` 3 lần để thuộc logic cho buổi vấn đáp.
 
 ---
@@ -20,9 +21,9 @@
 ## 🌐 GIAI ĐOẠN 2: INTEGRATION & APPS (31/12 - 01/01)
 *Mục tiêu: Kết nối các thành phần và làm cho nó "sống".*
 
-- [ ] **Ngày 5 (31/12): Trụ cột 3 - B-Tree Lite (Paths)**
-    - [ ] Xây dựng cấu trúc cây để quản lý thư mục (ví dụ: `/prod/db/`).
-    - [ ] Tích hợp B-Tree làm lớp validate đường dẫn trước khi tra cứu key.
+- [x] **Ngày 5 (31/12): Trụ cột 3 - B-Tree Lite (Paths)**
+    - [x] Xây dựng cấu trúc cây để quản lý thư mục (ví dụ: `/prod/db/`).
+    - [x] Tích hợp B-Tree làm lớp validate đường dẫn trước khi tra cứu key.
 - [ ] **Ngày 6 (01/01): API Layer & Kaellir Agent**
     - [ ] Viết API đơn giản cho Server (nhận command line/socket).
     - [ ] Code Agent `Kaellir` để giả lập client gửi request.
