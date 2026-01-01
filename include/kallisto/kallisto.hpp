@@ -7,6 +7,7 @@
 #include "kallisto/secret_entry.hpp"
 #include "kallisto/cuckoo_table.hpp"
 #include "kallisto/btree_index.hpp"
+#include "kallisto/storage_engine.hpp"
 
 namespace kallisto {
 
@@ -37,8 +38,12 @@ public:
 private:
     std::unique_ptr<CuckooTable> storage;
     std::unique_ptr<BTreeIndex> path_index;
+    std::unique_ptr<StorageEngine> persistence;
 
     std::string build_full_key(const std::string& path, const std::string& key) const;
+
+    // Internal helper to rebuild B-Tree after loading from disk
+    void rebuild_indices(const std::vector<SecretEntry>& secrets);
 };
 
 } // namespace kallisto

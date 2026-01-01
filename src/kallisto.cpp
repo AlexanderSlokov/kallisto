@@ -7,6 +7,13 @@ KallistoServer::KallistoServer() {
     // Cần cho phép truyền ENV để thay đổi kích thước Cuckoo Table và B-Tree
     storage = std::make_unique<CuckooTable>(2048);
     path_index = std::make_unique<BTreeIndex>(5);
+    persistence = std::make_unique<StorageEngine>();
+
+    // Recover state from disk
+    auto secrets = persistence->load_snapshot();
+    if (!secrets.empty()) {
+        rebuild_indices(secrets);
+    }
 }
 
 KallistoServer::~KallistoServer() = default;
@@ -31,7 +38,14 @@ bool KallistoServer::put_secret(const std::string& path, const std::string& key,
 
     // 3. Store in Cuckoo Table
     std::string full_key = build_full_key(path, key);
-    return storage->insert(full_key, entry);
+    bool result = storage->insert(full_key, entry);
+
+    // 4. Persist to Disk (In prototype, we sync on every write for safety)
+    if (result) {
+        persistence->save_snapshot(storage->get_all_entries());
+    }
+    
+    return result;
 }
 
 std::string KallistoServer::get_secret(const std::string& path, const std::string& key) {
@@ -61,7 +75,26 @@ std::string KallistoServer::get_secret(const std::string& path, const std::strin
 
 bool KallistoServer::delete_secret(const std::string& path, const std::string& key) {
     std::string full_key = build_full_key(path, key);
-    return storage->remove(full_key);
+    bool result = storage->remove(full_key);
+    
+    if (result) {
+        persistence->save_snapshot(storage->get_all_entries());
+    }
+    
+    return result;
+}
+
+void KallistoServer::rebuild_indices(const std::vector<SecretEntry>& secrets) {
+    info("[RECOVERY] Rebuilding state from " + std::to_string(secrets.size()) + " entries...");
+    for (const auto& entry : secrets) {
+        // 1. Rebuild B-Tree
+        path_index->insert_path(entry.path);
+        
+        // 2. Re-populate Cuckoo Table
+        std::string full_key = build_full_key(entry.path, entry.key);
+        storage->insert(full_key, entry);
+    }
+    info("[RECOVERY] Completed.");
 }
 
 } // namespace kallisto
