@@ -1,9 +1,34 @@
-# kallisto
-Kallisto is a Vault-compatible storage management, wrote by C++
+# HIGH-PERFORMANCE SECRET MANAGEMENT SYSTEM: IMPLEMENT A CUCKOO HASHING & B-TREE DATA STRUCTURE USING SIPHASH TO PREVENT HASHING COLLISIONS FROM DOS ATTACKS
 
-# Các giải thuật được sử dụng
+# INTRODUCTION
 
-## 1. Universal Hashing & SipHash
+
+
+
+# REQUIREMENTS
+
+## Benchmark Targets
+
+Với một server C++ tối ưu, các mốc hiệu năng cần được tối ưu tới các mốc sau:
+
+### RPS (Requests Per Second): > 50,000 req/s.
+
+Cuckoo Hashing với O(1) là worst-case, với các request tra cứu Secret đơn giản, CPU chỉ mất vài micro giây để tìm thấy dữ liệu. Nếu con số này dưới 10k, cần nghi ngờ về việc phần mềm có bị lỗi I/O hay không.
+
+### Latency (Độ trễ): p99 < 1ms (Sub-millisecond).
+
+Cache Locality (Day 3). Việc sắp xếp các bucket của bảng băm nằm liên tục trong bộ nhớ giúp CPU không bị "cache miss", dẫn đến độ trễ cực thấp.
+
+### Locust CCU (Concurrent Users): 500 - 1,000 CCU.
+
+Con số này chứng minh khả năng quản lý Call Stacks và tài nguyên hệ thống của bạn tốt, không bị tràn bộ nhớ hay deadlock khi nhiều Agent (Kaellir) gọi tới cùng lúc.
+
+---
+
+# THEORY
+
+
+## 1. SipHash
 
 Chức năng: Dùng để băm các khóa (Key/Secret Name)
 
@@ -31,233 +56,122 @@ Tại sao dùng: Một secret management system không chỉ lưu trong RAM mà 
 
 Ứng dụng: Dùng B-Tree để lưu trữ toàn bộ cây phân cấp các secret, thực hiện các truy vấn theo tiền tố (prefix search) cực nhanh, ví dụ: "Lấy tất cả secret trong thư mục /prod".
 
----
+# APPLICATIONS
 
-# Mục tiêu benchmark
+## Architecture (Mô hình Kallisto/Kaellir).
 
-## 1. Chỉ số "Code Xịn" (Benchmark Targets)
+### Storage Engine
 
-Với một server C++ tối ưu, bạn nên hướng tới các mốc sau:
+Ta sẽ sử dụng Binary Packing (giống Raft). Mục tiêu của ta là High Performance (Cuckoo Hash O(1)). Rất vô lý nếu bộ nhớ thì siêu nhanh mà ghi đĩa lại siêu chậm do phải tạo hàng nghìn folder và gây inode overhead.
+Việc `load_snapshot` từ 1 file binary vào RAM sẽ nhanh hơn rất nhiều so với việc scan folder.
 
-- RPS (Requests Per Second): > 50,000 req/s.   
-Tại sao: Vì bạn dùng Cuckoo Hashing (O(1) worst-case). Với các request tra cứu Secret đơn giản, CPU chỉ mất vài micro giây để tìm thấy dữ liệu. Nếu con số này dưới 10k, thầy sẽ đặt câu hỏi về việc bạn có đang gặp lỗi I/O hay không.
+## Implementation 
 
-- Latency (Độ trễ): p99 < 1ms (Sub-millisecond).
-Tại sao: Cache Locality (Day 3). Việc sắp xếp các bucket của bảng băm nằm liên tục trong bộ nhớ giúp CPU không bị "cache miss", dẫn đến độ trễ cực thấp.
+(Giải thích code Cuckoo, SipHash, B-Tree - *Copy code vào giải thích*).
 
-- Locust CCU (Concurrent Users): 500 - 1,000 CCU.
-Tại sao: Con số này chứng minh khả năng quản lý Call Stacks và tài nguyên hệ thống của bạn tốt, không bị tràn bộ nhớ hay deadlock khi nhiều Agent (Kaellir) gọi tới cùng lúc.
+## Workflow
 
----
+Khi chương trình (main.cpp) chạy, quy trình thử nghiệm sẽ diễn ra như sau:
 
-# 2. Mô hình server Kallisto & Kaellir agent
-Trong báo cáo 20 trang, bạn nên mô tả mô hình này như một giải pháp Sidecar Injection thực thụ:
-Thành phần
-Vai trò DSA
-Nhiệm vụ cụ thể
-Kallisto (Server)
-Cuckoo Hash 8& B-Tree 9
-Lưu trữ secrets. Trả về credential cực nhanh nhờ tra cứu hằng số O(1).
-Kaellir (Agent)
-Mocking Client
-Giả lập sidecar gửi yêu cầu tra cứu key (ví dụ: GET /secret/db-pass).
-Locust (Tester)
-Asymptotic Analysis 11
+### 1. Startup
+
+Khi khởi tạo server (KallistoServer được khởi tạo):
+
+Nó chuẩn bị 2 cấu trúc dữ liệu:
+
+- `B-Tree Index`: Sinh ra danh mục các đường dẫn (ví dụ: /prod/payment, /dev/db) hiện tại.
+
+- `Cuckoo Table`: Đây là nơi lưu trữ bí mật thực sự. Nó tạo sẵn số lượng Buckets cố định là `1024 buckets` để chờ điền dữ liệu.
+
+### 2. Khi cất giấu bí mật (Lệnh PUT)
+
+Người dùng (hoặc code) ra yêu cầu: "Lưu trữ mật khẩu secret123 vào đường dẫn /prod/db với key là `'password'` và value là `'secret123'`" Đây là những gì Kallisto làm bên trong:
+
+Kiểm tra Mục lục (B-Tree): Kallisto gọi function `put_secret`, mà bên trong function này có hàm `insert_path` kiểm tra xem đường dẫn `/prod/db` đã tồn tại hay chưa. Nếu chưa có thì nó ghi thêm dòng `/prod/db` vào B-tree index.
+
+Tạo `SecretEntry`: Nó đóng gói thông tin key, value, thời gian tạo vào một struct `SecretEntry`.
+
+Cất vào kho (Cuckoo Hashing):
+Nó dùng thuật toán SipHash để tính toán xem `SecretEntry` nên đặt vào ô số mấy trong "`Cuckoo Table`". Nếu ô đó trống, nó sẽ đặt vào và kết thúc công việc ngay lập tức. Nếu ô đó đã có `SecretEntry` khác, nó sẽ "đá" (kick) entry cũ sang ô khác để lấy chỗ cho `SecretEntry` mới. `SecretEntry` cũ sẽ thực hiện cơ chế này cho đến khi tất cả `SecretEntry` đều có chỗ. (Đây là điểm đặc biệt của Cuckoo Hashing).
+
+### 3. Khi lấy bí mật (Lệnh GET)
+
+Người dùng hỏi: "Cho tôi xin mật khẩu password trong ngăn /prod/db".
+
+Qua cổng bảo vệ (B-Tree Validation):
+Việc đầu tiên: Kallisto check ngay cuốn "Mục lục".
+Nếu trong Mục lục không hề có dòng /prod/db -> Từ chối phục vụ ngay lập tức. (Đây là tính năng bảo mật để tránh kẻ gian mò mẫm đường dẫn lung tung).
+Lục kho (Cuckoo Lookup):
+Nếu Mục lục ok, nó mới dùng SipHash tính vị trí.
+Vì là Cuckoo Hash, nó chỉ cần check đúng 2 vị trí duy nhất.
+Vị trí 1 có không? -> Có thì trả về.
+Không có thì check Vị trí 2 -> Có thì trả về.
+Cả 2 đều không? -> Kết luận: Không tìm thấy. (Tốc độ cực nhanh $O(1)$).
+Tóm tắt dưới dạng biểu đồ
+mermaid
+sequenceDiagram
+    participant User
+    participant Server as Kallisto
+    participant BTree as B-Tree (Path Index)
+    participant Cuckoo as Cuckoo (Secret Cache)
+    Note over Server: 1. Startup (Empty)
+    User->>Server: PUT("/prod/db", "pass", "123")
+    Server->>BTree: Insert Path "/prod/db"
+    Note right of BTree: Insert Path "/prod/db" into B-Tree
+    Server->>Cuckoo: Insert Secret
+    Note right of Cuckoo: Tính SipHash -> Tìm ô trống -> Ghi
+    User->>Server: GET("/dev/hack", "root")
+    Server->>BTree: Validate "/dev/hack"
+    BTree-->>Server: FALSE (Path not found)
+    Server-->>User: ERROR (Path not found)
+    User->>Server: GET("/prod/db", "pass")
+    Server->>BTree: Validate "/prod/db"
+    BTree-->>Server: TRUE (Path found)
+    Server->>Cuckoo: Lookup Key
+    Cuckoo-->>Server: Found "123"
+    Server-->>User: "123"
+
+# ANALYSIS
+
+## Time Complexity: 
+
+### For SipHash 
+
+It should be O(1). 
+
+Hence, time Complexity of SipHash is O(1).
+
+### For Cuckoo Hashing up and indexing
+
+It should be O(1). 
+
+Hence, time Complexity of Cuckoo Hashing up and indexing is O(1).
+
+### For B-Tree
+
+It should be O(log n). 
+
+Hence, time Complexity of B-Tree is O(log n).
+
+## Space Complexity: 
+
+### For SipHash 
+
+It should be O(1).
+
+Hence, space Complexity of SipHash is O(1).
+
+### For Cuckoo Hashing up and indexing
+
+It should be O(1). 
+
+Hence, space Complexity of Cuckoo Hashing up and indexing is O(1).
+
+### For B-Tree
+
+It should be O(log n). 
+
+Hence, space Complexity of B-Tree is O(log n).
 Đo lường thực tế để vẽ biểu đồ so sánh lý thuyết Big-O với hiệu năng thực tế.
 
----
-
-# Lịch trình cho dự án **Kallisto**.
-
----
-
-## GIAI ĐOẠN 1: KHỞI TẠO & CODE CORE (HẠ TẦNG)
-
-*Mục tiêu: Xây dựng xong MVP của hệ thống (Cuckoo Hash & B-Tree cơ bản).*
-
-**Ngày 1: 27/12 (Hôm nay) - Architecture & Skeleton**
-
-* **Nhiệm vụ:**
-* Setup Git repo, `CMakeLists.txt` (hoặc `Makefile`).
-* Tạo file header định nghĩa Class: `KallistoServer`, `CuckooTable`, `BTreeIndex`.
-* Định nghĩa các `struct` dữ liệu: `SecretEntry` (gồm key, value, ttl).
-
-
-* **Output:** Project compile được (dù chưa chạy logic gì). File `design.md` ghi lại flow dữ liệu.
-
-**Ngày 2: 28/12 - Trụ cột 1: SipHash & Basic Hashing**
-
-* **Lý thuyết:** Ôn lại Universal Hashing (Day 6).
-* **Code:**
-* Implement hàm `SipHash` (có thể copy reference implementation nhưng phải chuyển sang C++ style).
-* Viết Unit Test nhỏ để đảm bảo hàm băm ra kết quả nhất quán.
-
-
-* **Output:** Hàm `hash(key, seed)` chạy ngon lành.
-
-**Ngày 3 & 4: 29/12 - 30/12 - Trụ cột 2: Cuckoo Hashing Logic (QUAN TRỌNG NHẤT)**
-
-* **Lý thuyết:** Ôn cơ chế "Kicking" (đá key cũ sang bảng khác) và Cycle detection (phát hiện vòng lặp).
-* **Code:**
-* Implement `insert()`, `lookup()`, `delete()`.
-* Dùng `std::vector` để làm bucket.
-
-
-* **Luyện Live Code:** *Đây là phần thầy dễ bắt code lại nhất.* Hãy code đi code lại hàm `insert` ít nhất 3 lần cho thuộc logic "đá qua đá lại".
-* **Output:** Một `CuckooMap` lưu được secret và tìm kiếm trong .
-
----
-
-### GIAI ĐOẠN 2: MỞ RỘNG & TÍCH HỢP (ỨNG DỤNG)
-
-*Mục tiêu: Biến các hàm rời rạc thành một Server có thể gọi được.*
-
-**Ngày 5: 31/12 (Tết Dương lịch) - Trụ cột 3: B-Tree "Lite"**
-
-* **Chiến thuật:** Đừng làm B-Tree full tính năng của Database. Hãy làm **B-Tree lưu Path**.
-* **Code:**
-* Node cấu trúc: Chứa danh sách keys và con trỏ con (dùng `std::unique_ptr`).
-* Implement `search(path)` và `insert(path)`.
-* *Mẹo:* Nếu thấy logic Split node quá khó, hãy implement một cây tìm kiếm cân bằng đơn giản trước, rồi tối ưu sau nếu còn giờ.
-
-
-* **Output:** Có thể lưu secret theo đường dẫn `/prod/db/pass`.
-
-**Ngày 6: 01/01/2026 - API Layer & Agent "Kaellir"**
-
-* **Nhiệm vụ:**
-* Viết một lớp Wrapper đơn giản để nhận input từ CLI hoặc Socket giả lập.
-* Code `Kaellir` (Client): Một vòng lặp gửi request liên tục vào `Kallisto`.
-
-
-* **Output:** Client gửi "GET key", Server trả về "Value".
-
----
-
-### GIAI ĐOẠN 3: BENCHMARK & VIẾT BÁO CÁO
-
-*Mục tiêu: Tạo ra các con số "biết nói" và lấp đầy 20 trang báo cáo.*
-
-**Ngày 7: 02/01 - Benchmark (Locust/Script)**
-
-* **Nhiệm vụ:**
-* Chạy script `Kaellir` để spam 100,000 requests.
-* Đo thời gian phản hồi (Latency).
-* So sánh: Chạy thử với `std::map` (C++ default) để thấy sự khác biệt của Cuckoo Hash.
-
-
-* **Output:** Các biểu đồ so sánh RPS, Latency (Screenshot ngay để đưa vào báo cáo).
-
-**Ngày 8 & 9: 03/01 - 04/01 - Viết Báo Cáo (Sprint Writing)**
-
-* **Cấu trúc 20 trang (như đã bàn):**
-1. Introduction (Bài toán quản lý Secret & rủi ro Hash Flood).
-2. Architecture (Mô hình Kallisto/Kaellir).
-3. Theory & Implementation (Giải thích code Cuckoo, SipHash, B-Tree - *Copy code vào giải thích*).
-4. Performance Analysis (Phân tích Big-O và show biểu đồ Benchmark hôm trước).
-5. Conclusion.
-
-
-* **Output:** File PDF nháp đầu tiên.
-
----
-
-### GIAI ĐOẠN 4: DEFENSE DRILL (VỀ ĐÍCH)
-
-*Mục tiêu: Chuẩn bị tâm lý và kỹ năng để đối mặt với Thầy.*
-
-**Ngày 10: 05/01 - Review Code & Refactor**
-
-* **Nhiệm vụ:**
-* Đọc lại toàn bộ code. Chỗ nào dùng pointer trần (`*`) thì đổi sang `std::unique_ptr` hoặc `shared_ptr`.
-
-
-* Thêm comment vào code (Thầy sẽ đọc code trên máy bạn).
-* Kiểm tra memory leak (nếu biết dùng Valgrind thì tốt, không thì review bằng mắt).
-
-
-
-**Ngày 11: 06/01 - Tổng duyệt (Mock Defense)**
-
-* **Nhiệm vụ:**
-* Tự đặt câu hỏi: "Tại sao độ phức tạp là O(1)?", "Nếu bảng đầy thì sao?".
-* **Thử thách:** Mở một file trắng, tự code lại hàm `CuckooHash::Insert` trong 10 phút. Nếu làm được, bạn đã thắng 90%.
-* Quay video demo (theo yêu cầu nộp bài).
-
-
-
-**Ngày 12: 07/01 - LÊN THỚT (LIVE)**
-
-* Ngủ đủ giấc. Mang theo laptop đã sạc đầy. Tự tin với kiến thức về Hash Flood.
-
----
-
-### HÀNH ĐỘNG NGAY HÔM NAY (27/12)
-
-Bạn chỉ có **3 tiếng** tối nay. Hãy làm đúng 2 việc này để chốt "Software Design":
-
-1. **Define Interface (`kallisto.h`):** Viết ra tên các hàm bạn sẽ code. Đừng code ruột vội.
-2. **Chốt cấu trúc dữ liệu:** Xác định xem `Bucket` của Cuckoo Hash sẽ trông như thế nào (dùng `struct` hay `class`, lưu `pair<string, string>` hay gì).
-
-**Tôi có nên generate luôn cái file header `kallisto.h` mẫu (Skeleton) cho bạn để bạn bắt đầu tối nay không?** Nó sẽ tiết kiệm cho bạn 1 tiếng google cú pháp đấy.
-—
-Chào "Partner", tôi hiểu ý bạn. Chúng ta sẽ làm đúng tinh thần Agile/Scrum: Ship cái MVP (Minimum Viable Product) tinh gọn nhất, nhưng "đắt" nhất.
-Tính năng quan trọng nhất (The "Money Shot" Feature) mà Kallisto phải demo được để "khoe" trọn vẹn 3 thuật toán trong một luồng xử lý duy nhất chính là:
-🌟 MVP Feature: "Path-Based Secret Retrieval"
-(Truy xuất Secret theo phân cấp Đường dẫn)
-Đây là tính năng mô phỏng hành vi cốt lõi của Vault: Client hỏi xin một secret nằm trong một thư mục cụ thể, và Server trả về giá trị tức thì.
-
-Tại sao tính năng này "cân" được cả 3 thuật toán?
-Hãy tưởng tượng luồng đi của một request từ Kaellir (Agent) gửi tới Kallisto (Server):
-GET /prod/payment/db_pass
-Hệ thống sẽ xử lý theo quy trình 3 bước sau (Mapping chính xác vào 3 yêu cầu của thầy):
-1. Bước 1: Validate Path (Sân chơi của B-Tree)
-Hành động: Hệ thống phải kiểm tra xem thư mục /prod/payment/ có tồn tại không.
-Thuật toán: B-Tree (Day 11).
-Demo Point: Thay vì duyệt mảng tuyến tính ($O(N)$), bạn dùng B-Tree để "nhảy" qua các node đường dẫn.
-Tìm prod $\rightarrow$ trỏ xuống node con.
-Tìm payment $\rightarrow$ trỏ xuống node con.
-Thấy hợp lệ!
-Research Link: Disk-Optimized Storage (dù ta chạy RAM nhưng giả lập cấu trúc này).
-2. Bước 2: Secure Key Hashing (Sân chơi của SipHash)
-Hành động: Khi đã vào đúng "thư mục", hệ thống lấy key db_pass để chuẩn bị tìm kiếm.
-Thuật toán: Universal Hashing / SipHash (Day 6).
-Demo Point: Bạn không dùng std::hash. Bạn gọi hàm SipHash(key="db_pass", seed=SECRET_KEY).
-Research Link: Security & Hash Flooding Resistance (Chống tấn công từ chối dịch vụ).
-3. Bước 3: Instant Lookup (Sân chơi của Cuckoo Hashing)
-Hành động: Dùng mã băm vừa tạo để lấy giá trị mật khẩu thật.
-Thuật toán: Cuckoo Hashing (Day 7).
-Demo Point:
-Kiểm tra vị trí Hash1: Nếu có $\rightarrow$ Trả về ngay ($O(1)$).
-Nếu không, kiểm tra vị trí Hash2: Nếu có $\rightarrow$ Trả về ngay ($O(1)$).
-Không bao giờ phải duyệt danh sách liên kết dài lê thê.
-Research Link: Worst-case $O(1)$ Access Time.
-
-Kịch bản Demo (Script) để ăn điểm tuyệt đối
-Khi bạn quay video demo hoặc Live Defense, bạn chỉ cần show đúng 1 log này chạy trên màn hình console là thầy hiểu bạn đã làm xong bài:
-Plaintext
-[KAELLIR] Request: GET /prod/payment/db_pass
----------------------------------------------------
-1. [B-TREE] Searching path...
-   -> Found Node 'prod'
-   -> Found Node 'payment' (Leaf Node)
-   -> Path Validated. Time: 0.002ms
-
-2. [SIPHASH] Hashing key 'db_pass'...
-   -> Seed: 0xCAFEBABE
-   -> Hash Result: 0x93F2... (Secure against flooding)
-
-3. [CUCKOO] Looking up in Bucket Table...
-   -> Check T1[0x93F2]: EMPTY
-   -> Check T2[0x4A1B]: HIT! Value found.
-   -> Access Time: O(1) guaranteed.
----------------------------------------------------
-[RESPONSE] 200 OK: "SuperSecretPassword123"
-
-Kết luận
-MVP của chúng ta chỉ cần tập trung làm cho hàm GetSecret(path, key) chạy mượt mà theo đúng luồng trên.
-Không cần tính năng Update/Delete phức tạp.
-Không cần phân quyền User.
-Không cần mã hóa đường truyền (HTTPS).
-Bạn thấy tính năng MVP này đủ "gọn" để code trong 3-4 buổi tối chưa? Nếu OK, bước tiếp theo tôi sẽ đưa bạn thiết kế Class Diagram cực nhỏ gọn cho đúng cái MVP này.
-
+# CONCLUSION
