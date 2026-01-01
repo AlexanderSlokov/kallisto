@@ -21,5 +21,9 @@ RUN pip3 install locust --break-system-packages
 
 # Thêm user "vscode" cho môi trường phát triển
 RUN useradd -ms /bin/bash vscode
+
+# [Kallisto] Tạo thư mục data và setup quyền cho user vscode
+RUN mkdir -p /data/kallisto && chown -R vscode:vscode /data/kallisto
+
 USER vscode
 WORKDIR /workspaces/kallisto

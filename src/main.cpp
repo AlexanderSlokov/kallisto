@@ -17,9 +17,11 @@ int main() {
         kallisto::info("===============");
         
         kallisto::KallistoServer server;
-        kallisto::info("Initializing subsystems... [Persistence Enabled]");
+        kallisto::info("Initializing subsystems: [SipHash] [CuckooTable] [B-Tree]...");
+        // Thiếu bước validate
+        // Nếu đã dev validate, chèn log debug để debug sâu vào tiến trình khởi tạo
         
-        // Test Data
+        // 1. Path: /prod/payment, Key: db_pass
         std::string path = "/prod/payment";
         std::string key = "db_pass";
         std::string secret = "SuperSecretPassword123";
@@ -36,9 +38,6 @@ int main() {
                 kallisto::info("Secret stored. Restart server to verify persistence.");
             }
         }
-
-    } catch (const std::exception& e) {
-        
     } catch (const std::exception& e) {
         std::cerr << "Critical error: " << e.what() << std::endl;
         return 1;
