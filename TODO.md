@@ -25,9 +25,8 @@
     - [x] Xây dựng cấu trúc cây để quản lý thư mục (ví dụ: `/prod/db/`).
     - [x] Tích hợp B-Tree làm lớp validate đường dẫn trước khi tra cứu key.
 - [ ] **Ngày 5.5 (01/01): Giai đoạn 2.5 - Double-Defense Persistence**
-    - [ ] **Primary:** Setup `kallisto/data` làm storage gốc trên disk.
-    - [ ] **Secondary:** Implement Async Dispatcher để đẩy data sang Postgres "Bomb Shelter".
-    - [ ] **Challenge:** Đảm bảo performance không bị drop khi thực hiện dual-write.
+    - [ ] **Primary:** Setup `/data/kallisto` làm storage gốc trên disk.
+    - [ ] **Secondary:** Implement Async Dispatcher để đẩy data sang Postgres "Bomb Shelter". (không cần làm trong giai đoạn alpha- proof of concept này. Challenge: Đảm bảo performance không bị drop khi thực hiện dual-write).
 - [ ] **Ngày 6 (01/01): API Layer & Kaellir Agent**
     - [ ] Viết API đơn giản cho Server (nhận command line/socket).
     - [ ] Code Agent `Kaellir` để giả lập client gửi request.
