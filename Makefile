@@ -9,9 +9,11 @@ TARGET = kallisto
 all: build
 
 help:
-	@echo "Kallisto MVP Prototype Commands:"
+	@echo "Kallisto Commands:"
 	@echo "  make build   - Configure and compile the project"
-	@echo "  make run     - Build and execute the prototype demo"
+	@echo "  make run     - Run the interactive CLI"
+	@echo "  make test    - Run Unit Tests"
+	@echo "  make bench   - Run Benchmark (10,000 Ops)"
 	@echo "  make clean   - Remove build artifacts"
 	@echo "  make logs    - View the server logs"
 
@@ -20,8 +22,16 @@ build:
 	@cd $(BUILD_DIR) && cmake .. && make -j$(shell nproc)
 
 run: build
-	@echo "\n--- Starting Kallisto Prototype Demo ---\n"
+	@echo "\n--- Starting Kallisto (Type 'HELP' for commands) ---\n"
 	@./$(BUILD_DIR)/$(TARGET)
+
+test: build
+	@echo "\n--- Running Unit Tests ---\n"
+	@./$(BUILD_DIR)/kallisto_test
+
+bench: build
+	@echo "\n--- Running Benchmark (10,000 Ops) ---\n"
+	@echo "BENCH 10000\nEXIT" | ./$(BUILD_DIR)/$(TARGET)
 
 clean:
 	@echo "Cleaning build artifacts..."

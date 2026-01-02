@@ -5,7 +5,12 @@ namespace kallisto {
 
 KallistoServer::KallistoServer() {
     // Cần cho phép truyền ENV để thay đổi kích thước Cuckoo Table và B-Tree
-    storage = std::make_unique<CuckooTable>(2048);
+    // Why 16384?
+    // We plan to benchmark 10,000 items. 
+    // Cuckoo Hashing typically degrades > 50% load factor (leads to cycles/infinite loops).
+    // Capacity 16384 * 2 tables = 32,768 slots.
+    // Load Factor = 10,000 / 32,768 ≈ 30% (Very Safe).
+    storage = std::make_unique<CuckooTable>(16384);
     path_index = std::make_unique<BTreeIndex>(5);
     persistence = std::make_unique<StorageEngine>();
 
