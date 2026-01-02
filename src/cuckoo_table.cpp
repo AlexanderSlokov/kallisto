@@ -19,8 +19,17 @@ size_t CuckooTable::hash_2(const std::string& key) const {
 }
 
 bool CuckooTable::insert(const std::string& key, const SecretEntry& entry) {
-    if (lookup(key).has_value()) {
-        return false; // Already exists
+    // Check for update first
+    size_t h1 = hash_1(key);
+    if (table_1[h1].occupied && table_1[h1].key == key) {
+        table_1[h1].entry = entry;
+        return true;
+    }
+
+    size_t h2 = hash_2(key);
+    if (table_2[h2].occupied && table_2[h2].key == key) {
+        table_2[h2].entry = entry;
+        return true;
     }
 
     std::string current_key = key;
