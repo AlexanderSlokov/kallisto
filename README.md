@@ -50,11 +50,9 @@ Tại sao dùng: Cuckoo Hashing đảm bảo việc tìm kiếm luôn là O(1) t
 
 ## 3. B-Trees & Disk-Optimized Storage
 
-Chức năng: Quản lý cấu trúc cây thư mục (Path-based secrets) ý như các API của Hashicorp Vault.
+Chức năng: Quản lý cấu trúc cây thư mục (Path-based secrets), thực hiện các truy vấn theo tiền tố (prefix search).
 
-Tại sao dùng: Một secret management system không chỉ lưu trong RAM mà phải lưu xuống đĩa cứng (persistent storage). B-Tree tối ưu số lần đọc/ghi (I/O).
-
-Ứng dụng: Dùng B-Tree để lưu trữ toàn bộ cây phân cấp các secret, thực hiện các truy vấn theo tiền tố (prefix search) cực nhanh, ví dụ: "Lấy tất cả secret trong thư mục /prod".
+Tại sao dùng: Một secret management system không chỉ lưu trong RAM mà phải lưu xuống đĩa cứng (persistent storage). B-Tree tối ưu số lần đọc/ghi (I/O) và tìm path trong B-Tree tốn O(log N), rất nhanh để chặn các request rác (ví dụ: user hỏi path `/admin/`... nhưng trong hệ thống chưa từng tạo path này, B-Tree sẽ ngăn chặn logic tìm kiếm sai path trước cả khi hệ thống phải khởi động SipHash, tính toán băm hash và so sánh với các entry trong Cuckoo Table).
 
 # APPLICATIONS
 
@@ -62,8 +60,7 @@ Tại sao dùng: Một secret management system không chỉ lưu trong RAM mà 
 
 ### Storage Engine
 
-Ta sẽ sử dụng Binary Packing (giống Raft). Mục tiêu của ta là High Performance (Cuckoo Hash O(1)). Rất vô lý nếu bộ nhớ thì siêu nhanh mà ghi đĩa lại siêu chậm do phải tạo hàng nghìn folder và gây inode overhead.
-Việc `load_snapshot` từ 1 file binary vào RAM sẽ nhanh hơn rất nhiều so với việc scan folder.
+Ta sẽ sử dụng Binary Packing (giống Raft). Mục tiêu của ta là High Performance (Cuckoo Hash O(1)). Rất vô lý nếu xử lý dữ liệu trên RAM rất nhanh nhưng việc ứng dụng phải thao tác ghi đĩa siêu chậm do phải tạo hàng nghìn folder và gây inode overhead. Việc `load_snapshot` từ 1 file binary vào RAM sẽ nhanh hơn rất nhiều so với việc scan folder, do đó ta chọn Binary File như trong Raft.
 
 ## Implementation 
 
