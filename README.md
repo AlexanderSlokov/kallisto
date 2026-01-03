@@ -40,6 +40,83 @@ Tại sao dùng: Một secret management system phải đối mặt với nguy c
 
 SipHash sử dụng kiến trúc đảo bit (Add-Rotate-XOR) để tạo ra các bit nhiễu (noise bit) trong quá trình băm mà không tiêu tốn quá nhiều tài nguyên tính toán của CPU (việc xoay bit chỉ diễn ra trong một clock cycle nên rất nhanh và hiệu quả trong một chu kỳ của CPU).
 
+## SipHash Code Explanation
+
+Ta triển khai SipHash-2-4 (2 vòng nén, 4 vòng kết thúc) theo đúng chuẩn RFC 6421. Đây là "vệ sĩ" bảo vệ Kallisto khỏi các cuộc tấn công DoS.
+
+### The "SipRound" (Trái tim của thuật toán)
+
+Toàn bộ sức mạnh của SipHash nằm trong hàm `sipround`. Nó sử dụng cơ chế **ARX** (Addition, Rotation, XOR) để xáo trộn trạng thái 256-bit (4 biến `v0, v1, v2, v3` mỗi biến 64-bit).
+
+```cpp
+// ARX Network (Add - Rotate - XOR)
+static inline void sipround(uint64_t& v0, uint64_t& v1, 
+                            uint64_t& v2, uint64_t& v3) {
+    // Nửa bên trái: Trộn v0 và v1
+    v0 += v1;           // A: Addition (Gây nhiễu phi tuyến tính nhờ Carry bit)
+    v1 = rotl(v1, 13);  // R: Rotation (Xoay bit sang trái 13 vị trí)
+    v1 ^= v0;           // X: XOR (Trộn kết quả lại với nhau)
+    v0 = rotl(v0, 32);  // R: Xoay tiếp v0
+
+    // Nửa bên phải: Trộn v2 và v3
+    v2 += v3; 
+    v3 = rotl(v3, 16); 
+    v3 ^= v2;
+    
+    // Đảo chéo: Trộn v0 với v3, v2 với v1
+    v0 += v3; 
+    v3 = rotl(v3, 21); 
+    v3 ^= v0;
+    
+    v2 += v1; 
+    v1 = rotl(v1, 17); 
+    v1 ^= v2; 
+    v2 = rotl(v2, 32);
+}
+```
+*Phân tích:* Phép cộng (`+`) lan truyền sự thay đổi bit từ thấp lên cao. Phép xoay (`rotl`) lan truyền bit sang ngang. Phép `XOR` kết hợp lại. Lặp đi lặp lại quá trình này biến thông tin đầu vào thành một "mớ hỗn độn" không thể đảo ngược nếu không có Key.
+
+### Hashing Flow (Quy trình băm)
+
+Quy trình xử lý một chuỗi `input` diễn ra như sau (trích xuất từ `src/siphash.cpp`):
+
+```cpp
+uint64_t SipHash::hash(const std::string& input, uint64_t k0, uint64_t k1) {
+    // 1. Initialization (Khởi tạo trạng thái nội bộ với các "Magic Numbers")
+    // Mục đích: Phá vỡ tính đối xứng ban đầu.
+    uint64_t v0 = 0x736f6d6570736575ULL ^ k0; // "somepseu"
+    uint64_t v1 = 0x646f72616e646f6dULL ^ k1; // "dorandom"
+    uint64_t v2 = 0x6c7967656e657261ULL ^ k0; // "lygenera"
+    uint64_t v3 = 0x7465646279746573ULL ^ k1; // "tedbytes"
+
+    // 2. Compression Loop (Vòng lặp nén)
+    // Cắt input thành từng cục 8 bytes (64-bit) để xử lý.
+    // Với mỗi khối 64-bit 'mi':
+    // - XOR 'mi' vào v3 (Nạp dữ liệu vào trạng thái)
+    // - Chạy 2 vòng sipround (Xáo trộn)
+    // - XOR 'mi' vào v0 (Khóa dữ liệu lại)
+    for (; m < end; m += 8) {
+        // ... (code xử lý cắt byte) ...
+        v3 ^= mi;
+        for (int i = 0; i < 2; ++i) sipround(v0, v1, v2, v3);
+        v0 ^= mi;
+    }
+
+    // 3. Finalization (Giai đoạn kết thúc)
+    // Để tránh việc hai chuỗi khác nhau (ví dụ "abc" và "abc\0") sinh ra cùng hash,
+    // ta chèn độ dài chuỗi vào byte cuối cùng của trạng thái.
+    // Sau đó chạy thêm 4 vòng sipround nữa để đảm bảo tính ngẫu nhiên cực đại.
+    v2 ^= 0xff; 
+    for (int i = 0; i < 4; ++i) sipround(v0, v1, v2, v3);
+
+    return v0 ^ v1 ^ v2 ^ v3; // Trả về kết quả 64-bit
+}
+```
+
+### Tại sao an toàn hơn MurmurHash/CityHash?
+Các hàm băm nhanh (Non-cryptographic) như MurmurHash chỉ mạnh về tốc độ nhưng yếu về sự thay đổi bit (Avalanche Effect). Kẻ tấn công có thể dễ dàng tìm ra hai chuỗi `KeyA` và `KeyB` có cùng Hash.
+SipHash dùng một "Secret Key" (128-bit) làm tham số đầu vào. Nếu kẻ tấn công không biết Key này, hắn không thể tính trước được Hash của bất kỳ chuỗi nào. Do đó, hắn không thể tạo ra hàng triệu request có cùng Hash Index để làm nghẽn Cuckoo Table của ta.
+
 ## 2. Cuckoo Hashing
 
 Chức năng: Lưu trữ các secret trong RAM để truy xuất tức thì. Bắt chước theo Hashicorp Vault: xin trước luôn luôn vùng nhớ RAM để không cho các thread khác truy cập. 
